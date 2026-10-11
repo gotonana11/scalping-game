@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>スキャルピング練習ゲーム v1.6.13</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: system-ui, -apple-system, sans-serif; background:#0b0b0f; color:#e5e7eb; }
+  .dynamic-bg { display: none; }
+
+  .wrap { max-width: 1320px; margin:16px auto; padding:0 12px; }
+  h1 { font-size:16px; margin:8px 0 14px; color:#f1f5f9; }
+  .card { background:#11131a; border:1px solid #1f2430; border-radius:14px; padding:12px; box-shadow: 0 8px 24px rgba(0,0,0,.25); margin-bottom:12px; }
+  button { background:#2563eb; color:#fff; border:none; padding:9px 12px; border-radius:10px; cursor:pointer; font-weight:600; font-size:14px; }
+  button:hover { filter:brightness(1.1); } button:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-ghost { background:#374151; }
+  .btn-green{background:#16a34a;} .btn-pink{background:#db2777;} .btn-amber{background:#d97706;}
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .label { font-size:12px; color:#9ca3af; margin-top:2px; }
+  input[type=range] { width:100%; }
+  .chip { background:#0f172a; border:1px solid #243049; padding:4px 8px; border-radius:999px; font-size:12px; }
+  canvas { width:100%; height:500px; background:#0a0d14; border-radius:14px; border:1px solid #1f2430; display:block; }
+  .middle3 { display:grid; grid-template-columns: 1fr 180px 1.2fr; gap:12px; margin:12px 0; }
+  .box { background:#0e1320; border:1px solid #1f2430; border-radius:12px; padding:12px; }
+  .lotBig { font-size:18px; font-weight:800; text-align:center; }
+  .lotBtns { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:8px; }
+  .lotBtns button { padding:6px 10px; font-size:12px; }
+  .orderCol { display:flex; flex-direction:column; gap:10px; }
+  .plBox { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .plLeft { display:grid; grid-template-rows: 1fr 1fr; gap:10px; }
+  .pill { background:#0b1020; border:1px solid #1f2430; border-radius:12px; padding:12px; text-align:center; }
+  .green { color:#34d399; } .red{ color:#fb7185; }
+  .seg { display:flex; gap:8px; margin-top:8px; }
+  .seg button { background:#1f2430; color:#9ca3af; }
+  .seg button.active { background:#3b82f6; color:#fff; }
+  .stats-panel { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; text-align:center; }
+  .stat-item { padding:6px; }
+  .stat-value { font-size:18px; font-weight:bold; margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="dynamic-bg" id="dynamicBg"></div>
+<div class="wrap">
+  <h1>スキャルピング練習ゲーム v1.6.13</h1>
+
+  <!-- Controls -->
+  <div class="card" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: center;">
+    <div>
+      <div class="row">
+        <button id="btnStart">Start</button>
+        <button id="btnReset" class="btn-ghost">Reset</button>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div style="flex:1">
+          <div class="label">速度：<span id="spdLabel">5x</span></div>
+          <input id="speed" type="range" min="1" max="20" value="5"/>
+        </div>
+      </div>
+    </div>
+    <div class="pill" style="text-align: center;">
+      <div class="label">口座残高</div>
+      <div id="midEquity" style="font-size: 18px; font-weight: bold; margin-top: 4px;">300,000</div>
+    </div>
+    <div class="pill" style="text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px; flex-direction: column;">
+      <div id="characterDisplay" style="width: 48px; height: 48px;"></div>
+      <div id="rankName" style="font-size: 12px; font-weight: bold;">初級トレーダー</div>
+    </div>
+  </div>
+
+  <!-- P&L Info Area -->
+  <div class="card" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+    <div class="pill" style="text-align: center;">
+      <div style="font-size: 14px; font-weight: bold;">景気指数：<span id="economicIndex">50</span></div>
+    </div>
+    <div class="pill">評価損益：<span id="midUpl" class="green">+0</span></div>
+    <div class="pill">実現損益：<span id="midRpl" class="green">+0</span></div>
+  </div>
+
+  <!-- Alert message -->
+  <div id="alertMsg" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(220,38,38,0.95); color:white; padding:20px 40px; border-radius:12px; font-weight:bold; font-size:18px; display:none; z-index:1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+    口座残高が不足です
+  </div>
+
+  <!-- Stats Panel -->
+  <div class="card stats-panel" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="stat-item">
+      <div style="display: flex; align-items: center; justify-content: center; cursor: pointer; gap: 4px;">
+        <div style="font-size: 14px; font-weight: bold;">ロット設定</div>
+        <div id="lotMinus" style="padding: 4px 8px; background: #374151; color: #fb7185; font-weight: bold; transition: background 0.2s; font-size: 12px; border-radius: 4px;">-</div>
+        <div id="lotDisplay" style="font-size: 14px; font-weight: 800; color: #e5e7eb;">100</div>
+        <div id="lotPlus" style="padding: 4px 8px; background: #374151; color: #34d399; font-weight: bold; transition: background 0.2s; font-size: 12px; border-radius: 4px;">+</div>
+      </div>
+    </div>
+    <div class="stat-item">
+      <div style="font-size: 14px; font-weight: bold; text-align: center;">
+        ポジション：<span id="posType">なし</span> <span id="posQty"></span>
+        <div id="posValue" style="font-size: 10px; opacity: 0.8; margin-top: 2px;"></div>
+      </div>
+    </div>
+    <div class="stat-item">
+      <div style="font-size: 14px; font-weight: bold; text-align: center;">勝率：<span id="winrateChart">0%</span></div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card" style="position:relative;">
+    <div style="margin-bottom: 8px; font-size: 12px; color: #9ca3af;">
+      移動平均線: <span style="color: #38bdf8;">■ 5MA</span> | <span style="color: #a78bfa;">■ 12MA</span> | <span style="color: #f59e0b;">■ 25MA</span>
+    </div>
+    <!-- Trading Buttons Overlay -->
+    <div style="position: absolute; top: 50px; left: 80px; z-index: 10; display: flex; gap: 8px;">
+      <button id="btnBuy" class="btn-green" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">買い</button>
+      <button id="btnSell" class="btn-pink" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">売り</button>
+      <button id="btnClose" class="btn-amber" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">全決済</button>
+    </div>
+    <canvas id="chart" width="1320" height="500"></canvas>
+    <div id="hint" style="display:flex; position:absolute; inset:0; align-items:center; justify-content:center; pointer-events:none;">
+      <div style="background:rgba(15,23,42,.85); border:1px solid #243049; padding:10px 14px; border-radius:10px; font-weight:700;">Startを押すと動きます</div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  // State
+  var state = {
+    running: false, tfMin: 1, speedX: 5,
+    microStepsPerMin: 60, microIndex: 0, forming: null, bars: [],
+    qty: 0, avg: null, realized: 0, lot: 100, cash: 300000,
+    sessionEndMin: 390, curTimeMin: 0,
+    rafId: null, lastTs: null, accMs: 0,
+    sessionHigh: null, sessionLow: null, sessionHighPrice: null, sessionLowPrice: null,
+    prevSessionHigh: null, prevSessionLow: null, seed: Math.random() * 1e9,
+    stamps: [], wins: 0, losses: 0, totalHoldMin: 0, trades: 0, entryTimeMin: null,
+    rsi: 50, economicIndex: Math.floor(Math.random() * 101),
+    scrollOffset: 0
+  };
+
+  // 効果音再生関数
+  function playSE(isProfit) {
+    try {
+      var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+      if (isProfit) {
+        // プラス時：チャリーン（レジの音）
+        // 複数の音を重ねて硬貨の音を表現
+        var frequencies = [1046.50, 1318.51, 1568.00]; // C6, E6, G6（明るい和音）
+        
+        for (var i = 0; i < frequencies.length; i++) {
+          (function(index) {
+            setTimeout(function() {
+              var osc = audioCtx.createOscillator();
+              var gain = audioCtx.createGain();
+              
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              
+              osc.frequency.setValueAtTime(frequencies[index], audioCtx.currentTime);
+              osc.type = 'sine';
+              
+              // 短く鋭い音
+              gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+              
+              osc.start(audioCtx.currentTime);
+              osc.stop(audioCtx.currentTime + 0.08);
+            }, index * 30); // 30msずつずらして「チャリーン」感を出す
+          })(i);
+        }
+        
+        // 追加のキラキラ音（お金の輝き）
+        setTimeout(function() {
+          var osc2 = audioCtx.createOscillator();
+          var gain2 = audioCtx.createGain();
+          
+          osc2.connect(gain2);
+          gain2.connect(audioCtx.destination);
+          
+          osc2.frequency.setValueAtTime(2093.00, audioCtx.currentTime); // C7（高音）
+          osc2.type = 'triangle';
+          
+          gain2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+          
+          osc2.start(audioCtx.currentTime);
+          osc2.stop(audioCtx.currentTime + 0.1);
+        }, 60);
+        
+      } else {
+        // マイナス時：低い下降音
+        var oscillator = audioCtx.createOscillator();
+        var gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.frequency.setValueAtTime(392.00, audioCtx.currentTime); // G4
+        oscillator.frequency.exponentialRampToValueAtTime(196.00, audioCtx.currentTime + 0.2); // G3
+        oscillator.type = 'sawtooth';
+        gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+        oscillator.start(audioCtx.currentTime);
+        oscillator.stop(audioCtx.currentTime + 0.25);
+      }
+    } catch (e) {
+      // Audio APIが使えない環境では無視
+      console.log('Audio not supported');
+    }
+  }
+
+  // Helpers
+  function getEl(id) { return document.getElementById(id); }
+  function setText(id, v) { var el = getEl(id); if (el) el.textContent = v; }
+  function rng() { var x = Math.sin(state.seed++) * 10000; return x - Math.floor(x); }
+  function tickRound(px) { return px >= 3000 ? Math.round(px / 5) * 5 : Math.round(px); }
+
+  // Market simulation
+  // ランク名取得関数
+  function getRankName(balance) {
+    if (balance >= 10000000) return "億万株姫";
+    else if (balance >= 5000000) return "カリスマ";
+    else if (balance >= 3000000) return "テンバガー";
+    else if (balance >= 1000000) return "上級トレーダー";
+    else if (balance >= 500000) return "中級トレーダー";
+    else if (balance >= 250000) return "初級トレーダー";
+    else if (balance >= 100000) return "アルバイトトレーダー";
+    else return "極潰しトレーダー";
+  }
+
+  // ドット絵キャラクター生成関数
+  function generateCharacter(balance) {
+    var level = 0;
+    if (balance >= 10000000) level = 8;      // 1000万以上: 億万株姫
+    else if (balance >= 5000000) level = 7;  // 500万以上: カリスマ
+    else if (balance >= 3000000) level = 6;  // 300万以上: テンバガー
+    else if (balance >= 1000000) level = 5;  // 100万以上: 上級トレーダー
+    else if (balance >= 500000) level = 4;   // 50万以上: 中級トレーダー
+    else if (balance >= 250000) level = 3;   // 25万以上: 初級トレーダー
+    else if (balance >= 100000) level = 2;   // 10-25万: アルバイトトレーダー
+    else level = 1;                          // 10万以下: 極潰しトレーダー
+    
+    var svg = '<svg width="48" height="48" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">';
+    
+    // レベル1: 極潰しトレーダー 💀
+    if (level === 1) {
+      // 顔（青白い）
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#b0c4de"/>';
+      // 目（死んだ目）
+      svg += '<rect x="6" y="6" width="1" height="2" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="1" height="2" fill="#000000"/>';
+      // 口（絶望）
+      svg += '<rect x="6" y="9" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="7" y="10" width="2" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#000000"/>';
+      // ボロボロの服
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#3a2a1a"/>';
+      svg += '<rect x="5" y="11" width="1" height="1" fill="#1a1a1a"/>';
+      svg += '<rect x="10" y="12" width="1" height="1" fill="#1a1a1a"/>';
+      // 涙
+      svg += '<rect x="6" y="8" width="1" height="1" fill="#87ceeb"/>';
+      svg += '<rect x="9" y="8" width="1" height="1" fill="#87ceeb"/>';
+    }
+    
+    // レベル2: アルバイトトレーダー 😓
+    else if (level === 2) {
+      // 顔（疲れた顔色）
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#d4a574"/>';
+      // 目（疲れた目）
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="6" y="7" width="1" height="1" fill="#888888"/>'; // クマ
+      svg += '<rect x="9" y="7" width="1" height="1" fill="#888888"/>'; // クマ
+      // 口（不安）
+      svg += '<rect x="7" y="9" width="2" height="1" fill="#000000"/>';
+      // 安い服
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#6a5a4a"/>';
+    }
+    
+    // レベル3: 初級トレーダー 😐
+    else if (level === 3) {
+      // 顔
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#f4c5a0"/>';
+      // 目
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#000000"/>';
+      // 口（普通）
+      svg += '<rect x="7" y="9" width="2" height="1" fill="#000000"/>';
+      // カジュアルな服
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#708090"/>';
+    }
+    
+    // レベル4: 中級トレーダー 🙂
+    else if (level === 4) {
+      // 顔
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#f4c5a0"/>';
+      // 目（明るい）
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#000000"/>';
+      // 口（笑顔）
+      svg += '<rect x="6" y="9" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="7" y="8" width="2" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#000000"/>';
+      // ビジネスカジュアル
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#4169e1"/>';
+    }
+    
+    // レベル5: 上級トレーダー 😊
+    else if (level === 5) {
+      // 顔
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#f4c5a0"/>';
+      // 目（自信）
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#000000"/>';
+      // 口（しっかりした笑顔）
+      svg += '<rect x="6" y="9" width="1" height="1" fill="#ff0000"/>';
+      svg += '<rect x="7" y="8" width="2" height="1" fill="#ff0000"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#ff0000"/>';
+      // スーツ
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#1a1a2e"/>';
+      svg += '<rect x="7" y="10" width="2" height="4" fill="#ffffff"/>'; // ネクタイ
+    }
+    
+    // レベル6: テンバガー 🚀
+    else if (level === 6) {
+      // 顔
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#f4c5a0"/>';
+      // 目（興奮）
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#00ff00"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#00ff00"/>';
+      // 口（大興奮）
+      svg += '<rect x="6" y="8" width="4" height="1" fill="#ff0000"/>';
+      svg += '<rect x="6" y="9" width="1" height="1" fill="#ff0000"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#ff0000"/>';
+      // 高級スーツ
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#0a0a1e"/>';
+      svg += '<rect x="7" y="10" width="2" height="4" fill="#00ff00"/>'; // 緑ネクタイ
+      // ロケット（テンバガーの象徴）
+      svg += '<rect x="12" y="6" width="1" height="3" fill="#ff4500"/>';
+      svg += '<rect x="12" y="5" width="1" height="1" fill="#ffff00"/>'; // 炎
+    }
+    
+    // レベル7: カリスマ 😎✨
+    else if (level === 7) {
+      // 高級な帽子
+      svg += '<rect x="4" y="2" width="8" height="1" fill="#000000"/>';
+      svg += '<rect x="5" y="3" width="6" height="1" fill="#000000"/>';
+      // 顔
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#f4c5a0"/>';
+      // サングラス
+      svg += '<rect x="5" y="6" width="2" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="6" width="2" height="1" fill="#000000"/>';
+      // 口（ニヤリ）
+      svg += '<rect x="7" y="8" width="3" height="1" fill="#ff0000"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#ff0000"/>';
+      // タキシード
+      svg += '<rect x="4" y="10" width="8" height="4" fill="#000000"/>';
+      svg += '<rect x="7" y="10" width="2" height="4" fill="#ffffff"/>'; // 白シャツ
+      svg += '<rect x="7" y="11" width="2" height="1" fill="#ffd700"/>'; // 金ボタン
+      // オーラ
+      svg += '<rect x="3" y="5" width="1" height="1" fill="#ffff00" opacity="0.7"/>';
+      svg += '<rect x="12" y="7" width="1" height="1" fill="#ffff00" opacity="0.7"/>';
+    }
+    
+    // レベル8: 億万株姫 👑💖
+    else if (level === 8) {
+      // 王冠
+      svg += '<rect x="5" y="1" width="6" height="1" fill="#ffd700"/>';
+      svg += '<rect x="6" y="2" width="1" height="1" fill="#ffd700"/>';
+      svg += '<rect x="8" y="2" width="1" height="1" fill="#ffd700"/>';
+      svg += '<rect x="9" y="2" width="1" height="1" fill="#ffd700"/>';
+      svg += '<rect x="7" y="0" width="2" height="1" fill="#ff69b4"/>'; // ピンクの宝石
+      // 顔（女性）
+      svg += '<rect x="5" y="4" width="6" height="6" fill="#ffe4e1"/>';
+      // 髪（長い髪）
+      svg += '<rect x="4" y="4" width="1" height="6" fill="#8b4513"/>';
+      svg += '<rect x="11" y="4" width="1" height="6" fill="#8b4513"/>';
+      // キラキラ目
+      svg += '<rect x="6" y="6" width="1" height="1" fill="#ff69b4"/>';
+      svg += '<rect x="9" y="6" width="1" height="1" fill="#ff69b4"/>';
+      // まつげ
+      svg += '<rect x="6" y="5" width="1" height="1" fill="#000000"/>';
+      svg += '<rect x="9" y="5" width="1" height="1" fill="#000000"/>';
+      // 口（優雅な笑み）
+      svg += '<rect x="7" y="8" width="2" height="1" fill="#ff1493"/>';
+      svg += '<rect x="6" y="9" width="1" height="1" fill="#ff1493"/>';
+      svg += '<rect x="9" y="9" width="1" height="1" fill="#ff1493"/>';
+      // 豪華なドレス
+      svg += '<rect x="3" y="10" width="10" height="4" fill="#ff69b4"/>';
+      svg += '<rect x="7" y="10" width="2" height="4" fill="#ffd700"/>'; // 金の装飾
+      // キラキラエフェクト
+      svg += '<rect x="2" y="5" width="1" height="1" fill="#ffff00"/>';
+      svg += '<rect x="13" y="7" width="1" height="1" fill="#ff69b4"/>';
+      svg += '<rect x="3" y="12" width="1" height="1" fill="#ffff00"/>';
+      svg += '<rect x="12" y="3" width="1" height="1" fill="#ff69b4"/>';
+    }
+    
+    svg += '</svg>';
+    return svg;
+  }
+
+  // ランダムなボラティリティスパイクを生成
+  function triggerVolatilitySpike() {
+    // 5-10分後に次のスパイク
+    state.nextSpikeTime = state.curTimeMin + 5 + Math.floor(rng() * 5);
+    
+    // スパイクの強さ（1.5倍～2.5倍）
+    var multiplier = 1.5 + rng() * 1.0;
+    
+    // スパイクの持続時間（1-3分）
+    var duration = 1 + Math.floor(rng() * 2);
+    
+    state.volatilitySpike = {
+      startTime: state.curTimeMin,
+      endTime: state.curTimeMin + duration,
+      multiplier: multiplier
+    };
+  }
+
+  function getSessionVolatility(timeMin) {
+    var t = timeMin >= 0 ? timeMin : timeMin + 390;
+    var baseVol = 1.0;
+    
+    // 実際の相場に近い時間帯別ボラティリティ
+    if (t >= 0 && t < 10) baseVol = 3.5;        // 9:00-9:10 寄り付き直後（超高）
+    else if (t >= 10 && t < 30) baseVol = 2.8;  // 9:10-9:30 寄り付き（非常に高い）
+    else if (t >= 30 && t < 60) baseVol = 2.0;  // 9:30-10:00 （高い）
+    else if (t >= 60 && t < 90) baseVol = 1.3;  // 10:00-10:30 （中程度）
+    else if (t >= 90 && t < 120) baseVol = 2.2; // 10:30-11:00 （高い・節目）
+    else if (t >= 120 && t < 150) baseVol = 1.5; // 11:00-11:30 （中程度）
+    else if (t >= 210 && t < 225) baseVol = 2.5; // 12:30-12:45 後場開始（非常に高い）
+    else if (t >= 225 && t < 240) baseVol = 2.0; // 12:45-13:00 （高い）
+    else if (t >= 240 && t < 270) baseVol = 1.4; // 13:00-13:30 （中程度）
+    else if (t >= 270 && t < 300) baseVol = 1.2; // 13:30-14:00 （やや低い）
+    else if (t >= 300 && t < 330) baseVol = 1.6; // 14:00-14:30 （中～やや高い）
+    else if (t >= 330 && t < 360) baseVol = 2.3; // 14:30-15:00 （高い）
+    else if (t >= 360 && t < 375) baseVol = 3.0; // 15:00-15:15 大引け前（非常に高い）
+    else if (t >= 375 && t <= 390) baseVol = 3.8; // 15:15-15:30 大引け（超高）
+    else if (t > 150 && t < 210) baseVol = 0.3;  // 昼休み（非常に低い）
+    
+    // ランダムなボラティリティスパイク（5分に1回程度）
+    if (state.volatilitySpike && state.volatilitySpike.startTime <= t && t < state.volatilitySpike.endTime) {
+      baseVol *= state.volatilitySpike.multiplier;
+    }
+    
+    return baseVol;
+  }
+
+  function getSessionVolumeBias(timeMin) {
+    var t = timeMin >= 0 ? timeMin : timeMin + 390;
+    var baseBias = intradayVolBias(t);
+    if ((t >= 0 && t <= 20) || (t >= 135 && t <= 155) || 
+        (t >= 210 && t <= 230) || (t >= 370 && t <= 390)) {
+      baseBias *= 3.0;
+    }
+    return baseBias;
+  }
+
+  function getPriceLevelReaction(currentPrice, prevPrice) {
+    var reaction = 0;
+    
+    if (state.prevSessionHigh && Math.abs(currentPrice - state.prevSessionHigh) < 5) {
+      reaction += currentPrice > state.prevSessionHigh ? -0.08 : 0.05;
+    }
+    if (state.prevSessionLow && Math.abs(currentPrice - state.prevSessionLow) < 5) {
+      reaction += currentPrice < state.prevSessionLow ? -0.05 : 0.08;
+    }
+    
+    if (state.sessionHighPrice && Math.abs(currentPrice - state.sessionHighPrice) < 3) {
+      reaction += currentPrice > state.sessionHighPrice ? -0.06 : 0.03;
+    }
+    if (state.sessionLowPrice && Math.abs(currentPrice - state.sessionLowPrice) < 3) {
+      reaction += currentPrice < state.sessionLowPrice ? -0.03 : 0.06;
+    }
+    
+    return reaction * (state.economicIndex / 50);
+  }
+
+  function intradayVolBias(t) {
+    var tt = Math.max(0, Math.min(390, t));
+    var open = Math.exp(-Math.pow(tt / 30, 2)), close = Math.exp(-Math.pow((390 - tt) / 30, 2));
+    var midday = 0.5 + 0.5 * Math.cos(Math.PI * (tt / 390));
+    return Math.max(0.6, Math.min(1.6, 0.7 * midday + 0.3 + 0.6 * (open + close)));
+  }
+
+  function regimeFor(min) {
+    var ph = Math.floor(Math.max(0, min) / 120) % 6;
+    var economicBias = (state.economicIndex - 50) / 1000;
+    var regimes = [
+      {drift: -0.02 + economicBias, vol: 1.2},
+      {drift: 0.04 + economicBias, vol: 1.6},
+      {drift: 0.01 + economicBias, vol: 1.0},
+      {drift: 0.03 + economicBias, vol: 1.2},
+      {drift: 0 + economicBias, vol: 1.9},
+      {drift: -0.015 + economicBias, vol: 1.2}
+    ];
+    return regimes[ph] || regimes[5];
+  }
+
+  // Initialize previous day
+  function preloadPreviousDay() {
+    var bars = [], p = tickRound(1200 * (0.98 + rng() * 0.04));
+    var sessionHigh = p, sessionLow = p;
+    
+    // 前日データは9:00-15:30 (0分から390分)
+    for (var t = -390; t <= -1; t += state.tfMin) {
+      var reg = regimeFor(t);
+      var volScale = 1;
+      var vBias = getSessionVolumeBias(t);
+      var volMultiplier = getSessionVolatility(t);
+      
+      var drift = reg.drift;
+      var baseVol = reg.vol * 0.9 * volScale * (0.8 + 0.2 * vBias) * volMultiplier;
+      var shock = (rng() - 0.5) * 2.0 * baseVol;
+      var c = tickRound(p * (1 + (drift + shock) / 100));
+      var h = tickRound(Math.max(p, c) * (1 + rng() * baseVol / 100));
+      var l = tickRound(Math.min(p, c) * (1 - rng() * baseVol / 100));
+      var v = Math.round(100 * (0.6 + Math.abs(c / p - 1) * 800) * vBias * volMultiplier);
+      
+      sessionHigh = Math.max(sessionHigh, h); 
+      sessionLow = Math.min(sessionLow, l);
+      
+      bars.push({o: p, h: h, l: l, c: c, v: v, timeMin: t});
+      p = c;
+    }
+    state.bars = bars; 
+    state.sessionHigh = sessionHigh; 
+    state.sessionLow = sessionLow;
+    state.prevSessionHigh = sessionHigh; 
+    state.prevSessionLow = sessionLow;
+  }
+
+  function init() {
+    preloadPreviousDay();
+    state.curTimeMin = 0;  // 9:00から開始
+    var p = state.bars.length ? state.bars[state.bars.length - 1].c : 1200;
+    
+    // 前日データはstate.barsに入っているが、当日データはまだない
+    // formingは当日の最初のバー（9:00）
+    state.forming = {o: p, h: p, l: p, c: p, vAcc: 0, timeMin: 0};
+    state.microIndex = 0; 
+    state.accMs = 0; 
+    state.lastTs = null;
+    state.cash = 300000; 
+    state.qty = 0; 
+    state.avg = null; 
+    state.realized = 0;
+    state.stamps = []; 
+    state.wins = 0; 
+    state.losses = 0;
+    state.totalHoldMin = 0; 
+    state.trades = 0; 
+    state.entryTimeMin = null;
+    state.sessionHighPrice = p; 
+    state.sessionLowPrice = p;
+    state.volatilitySpike = null;
+    state.nextSpikeTime = 5 + Math.floor(Math.random() * 5);
+    
+    // スクロール位置を9:00が中央に来るように設定
+    // 前日390本 + ギャップ5本 の後に9:00が来る
+    // 画面の中央は60番目なので、395 - 60 = 335
+    state.scrollOffset = 335;
+    
+    draw(); 
+    updateUI();
+  }
+
+  // Micro step simulation - 当日データのみを生成
+  function microStep() {
+    if (!state.forming) return;
+    if (state.forming.timeMin < 0) return; // 前日データは生成しない
+    
+    // ランダムなボラティリティスパイクのチェック
+    if (state.curTimeMin >= state.nextSpikeTime && state.curTimeMin < 390) {
+      triggerVolatilitySpike();
+    }
+    
+    var steps = state.tfMin * state.microStepsPerMin;
+    var last = state.forming.c;
+    var reg = regimeFor(state.curTimeMin);
+    var volScale = 1;
+    var vBias = getSessionVolumeBias(state.curTimeMin);
+    var volMultiplier = getSessionVolatility(state.curTimeMin);
+    
+    var priceLevelReaction = getPriceLevelReaction(last, state.bars.length > 0 ? state.bars[state.bars.length - 1].c : last);
+    
+    var driftPerBar = reg.drift + priceLevelReaction;
+    var volPerBar = reg.vol * volScale * (0.8 + 0.4 * vBias) * volMultiplier;
+    var shock = (rng() - 0.5) * 2.0 * volPerBar / Math.sqrt(steps);
+    var next = tickRound(last * (1 + (driftPerBar / steps + shock) / 100));
+    
+    state.forming.vAcc += 2.0 * Math.abs(next / last - 1) * 10000 * vBias * volMultiplier;
+    state.forming.c = next;
+    state.forming.h = Math.max(state.forming.h, next);
+    state.forming.l = Math.min(state.forming.l, next);
+    state.sessionHigh = Math.max(state.sessionHigh, state.forming.h);
+    state.sessionLow = Math.min(state.sessionLow, state.forming.l);
+    
+    state.sessionHighPrice = Math.max(state.sessionHighPrice || 0, state.forming.h);
+    state.sessionLowPrice = Math.min(state.sessionLowPrice || Infinity, state.forming.l);
+    
+    state.microIndex++;
+    
+    if (state.microIndex >= steps) {
+      var newBar = {
+        o: state.forming.o, h: state.forming.h, l: state.forming.l, c: state.forming.c,
+        v: Math.round(state.forming.vAcc), timeMin: state.forming.timeMin
+      };
+      state.bars.push(newBar);
+      
+      state.curTimeMin = state.forming.timeMin;
+      
+      // 昼休みスキップ（11:30から12:30）
+      if (state.curTimeMin === 149) {
+        state.curTimeMin = 209; // 次は12:30
+      }
+      
+      if (state.curTimeMin >= state.sessionEndMin) {
+        state.running = false;
+      } else {
+        var base = state.forming.c;
+        state.forming = {o: base, h: base, l: base, c: base, vAcc: 0, timeMin: state.curTimeMin + state.tfMin};
+        state.microIndex = 0;
+      }
+      draw(); 
+      updateUI();
+    }
+  }
+
+  // Trading functions
+  function lastPrice() { return state.forming ? state.forming.c : 1200; }
+  
+  function showAlert(message) {
+    var alert = getEl("alertMsg");
+    alert.textContent = message;
+    alert.style.display = "block";
+    setTimeout(function() {
+      alert.style.display = "none";
+    }, 2000);
+  }
+  
+  function tradeLots(delta) {
+    var shares = delta * state.lot;
+    if (shares === 0) return;
+    var p = lastPrice();
+    
+    var requiredCash = Math.abs(shares) * p; // 買いでも売りでも同額の資金が必要
+    
+    if (state.qty === 0) {
+      // 新規ポジション：利用可能資金をチェック
+      if (requiredCash > state.cash) {
+        showAlert("口座残高が不足です");
+        return;
+      }
+      state.qty = shares; 
+      state.avg = p; 
+      state.cash -= requiredCash; // 買いでも売りでも資金を拘束
+      state.stamps.push({t: state.forming ? state.forming.timeMin : state.curTimeMin, price: p, kind: 'IN'});
+      state.entryTimeMin = state.forming ? state.forming.timeMin : state.curTimeMin;
+    } else if ((state.qty > 0 && shares > 0) || (state.qty < 0 && shares < 0)) {
+      // 同方向の増玉：追加資金をチェック
+      if (requiredCash > state.cash) {
+        showAlert("口座残高が不足です");
+        return;
+      }
+      state.cash -= requiredCash; // 追加資金を拘束
+      var newQty = state.qty + shares;
+      state.avg = Math.round((state.avg * Math.abs(state.qty) + p * Math.abs(shares)) / Math.abs(newQty));
+      state.qty = newQty;
+    } else {
+      // 反対売買（決済または反転）
+      var closeAmt = Math.min(Math.abs(shares), Math.abs(state.qty));
+      var profit = state.qty > 0 ? (p - state.avg) * closeAmt : (state.avg - p) * closeAmt;
+      
+      // 効果音再生
+      playSE(profit >= 0);
+      
+      state.realized += profit;
+      
+      // 決済分の拘束資金を解放（元の拘束額 + 損益）
+      var releasedCash = closeAmt * state.avg + profit;
+      state.cash += releasedCash;
+      
+      if (profit >= 0) state.wins++; else state.losses++;
+      if (state.entryTimeMin != null) {
+        state.totalHoldMin += (state.forming ? state.forming.timeMin : state.curTimeMin) - state.entryTimeMin;
+        state.trades++;
+      }
+      
+      state.stamps.push({t: state.forming ? state.forming.timeMin : state.curTimeMin, price: p, kind: 'OUT'});
+      state.qty += state.qty > 0 ? -closeAmt : closeAmt;
+      
+      // 残りの分で反転ポジション
+      var flip = Math.abs(shares) - closeAmt;
+      if (flip > 0) {
+        var flipCash = flip * p;
+        if (flipCash > state.cash) {
+          showAlert("口座残高が不足です");
+          if (state.qty === 0) {
+            state.avg = null;
+            state.entryTimeMin = null;
+          }
+          updateUI();
+          return;
+        }
+        state.qty = shares > 0 ? flip : -flip;
+        state.avg = p;
+        state.cash -= flipCash; // 反転分の資金を拘束
+        state.stamps.push({t: state.forming ? state.forming.timeMin : state.curTimeMin, price: p, kind: 'IN'});
+        state.entryTimeMin = state.forming ? state.forming.timeMin : state.curTimeMin;
+      } else if (state.qty === 0) {
+        state.avg = null;
+        state.entryTimeMin = null;
+      }
+    }
+    updateUI();
+  }
+  
+  function closeAll() {
+    if (state.qty === 0) return;
+    var p = lastPrice();
+    var profit = state.qty > 0 ? (p - state.avg) * state.qty : (state.avg - p) * Math.abs(state.qty);
+    
+    // 効果音再生
+    playSE(profit >= 0);
+    
+    state.realized += profit;
+    
+    // 全ポジション決済：拘束資金を解放（元の拘束額 + 損益）
+    var releasedCash = Math.abs(state.qty) * state.avg + profit;
+    state.cash += releasedCash;
+    
+    if (profit >= 0) state.wins++; else state.losses++;
+    if (state.entryTimeMin != null) {
+      state.totalHoldMin += (state.forming ? state.forming.timeMin : state.curTimeMin) - state.entryTimeMin;
+      state.trades++;
+    }
+    
+    state.stamps.push({t: state.forming ? state.forming.timeMin : state.curTimeMin, price: p, kind: 'OUT'});
+    state.qty = 0; 
+    state.avg = null; 
+    state.entryTimeMin = null;
+    updateUI();
+  }
+
+  // Animation loop
+  function rafLoop(ts) {
+    if (!state.running) return;
+    if (state.lastTs == null) state.lastTs = ts;
+    var dt = ts - state.lastTs;
+    state.lastTs = ts;
+    state.accMs += dt;
+    var msPerMicro = 1000 / state.speedX;
+    while (state.accMs >= msPerMicro && state.running) {
+      microStep();
+      state.accMs -= msPerMicro;
+    }
+    draw(); 
+    updateUI();
+    state.rafId = requestAnimationFrame(rafLoop);
+  }
+
+  function start() {
+    if (state.running) return;
+    state.running = true;
+    getEl("btnStart").textContent = "Pause";
+    getEl("hint").style.display = "none";
+    state.lastTs = null;
+    state.accMs = 0;
+    state.rafId = requestAnimationFrame(rafLoop);
+  }
+
+  function pause() {
+    state.running = false;
+    getEl("btnStart").textContent = "Start";
+    getEl("hint").style.display = "flex";
+    if (state.rafId) {
+      cancelAnimationFrame(state.rafId);
+      state.rafId = null;
+    }
+  }
+
+  function reset() {
+    pause();
+    state.seed = Math.random() * 1e9;
+    state.economicIndex = Math.floor(Math.random() * 101);
+    init();
+  }
+
+  // キラキラエフェクト
+  function addSparkleEffect(isProfit) {
+    var sparkleEl = getEl("sparkleEffect");
+    if (!sparkleEl) {
+      sparkleEl = document.createElement("div");
+      sparkleEl.id = "sparkleEffect";
+      sparkleEl.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+        pointer-events: none; z-index: 1000; opacity: 0;
+        background: ${isProfit ? 
+          "radial-gradient(circle, rgba(255,215,0,0.1) 0%, transparent 70%)" : 
+          "radial-gradient(circle, rgba(220,38,38,0.1) 0%, transparent 70%)"};
+        animation: sparkle 2s ease-out;
+      `;
+      document.body.appendChild(sparkleEl);
+      
+      setTimeout(function() {
+        if (sparkleEl && sparkleEl.parentNode) {
+          sparkleEl.parentNode.removeChild(sparkleEl);
+        }
+      }, 2000);
+    }
+  }
+  
+  // SVG部屋生成関数
+  function generateRoomSVG(totalBalance) {
+    var roomLevel = 0;
+    if (totalBalance >= 10000000) roomLevel = 6;      // 1000万以上: 超豪邸
+    else if (totalBalance >= 5000000) roomLevel = 5;  // 500万以上: 豪邸
+    else if (totalBalance >= 3000000) roomLevel = 4;  // 300万以上: 一軒家
+    else if (totalBalance >= 1000000) roomLevel = 3;  // 100万以上: マンション
+    else if (totalBalance >= 500000) roomLevel = 2;   // 50万以上: 1LDK
+    else roomLevel = 1;                               // 50万未満: ワンルーム
+    
+    var svg = '<svg width="100%" height="100%" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">';
+    
+    // 基本的な部屋の壁と床
+    svg += '<rect x="0" y="400" width="800" height="200" fill="#2d1810" opacity="0.3"/>'; // 床
+    svg += '<rect x="0" y="0" width="800" height="400" fill="#1a1a2e" opacity="0.2"/>'; // 壁
+    
+    // 窓
+    if (roomLevel >= 2) {
+      svg += '<rect x="600" y="50" width="150" height="200" fill="#87ceeb" opacity="0.3" stroke="#4a5568" stroke-width="3"/>'; // 窓
+      svg += '<line x1="675" y1="50" x2="675" y2="250" stroke="#4a5568" stroke-width="2"/>'; // 窓枠
+      svg += '<line x1="600" y1="150" x2="750" y2="150" stroke="#4a5568" stroke-width="2"/>'; // 窓枠
+    }
+    
+    // 家具レベル1: ワンルーム
+    if (roomLevel >= 1) {
+      // ベッド
+      svg += '<rect x="50" y="450" width="120" height="80" fill="#8b4513" opacity="0.4"/>'; // ベッドフレーム
+      svg += '<rect x="55" y="440" width="110" height="20" fill="#ffffff" opacity="0.3"/>'; // 枕
+      
+      // 小さなテーブル
+      svg += '<rect x="250" y="480" width="60" height="40" fill="#654321" opacity="0.4"/>'; // テーブル
+      svg += '<rect x="255" y="475" width="10" height="45" fill="#654321" opacity="0.4"/>'; // 脚1
+      svg += '<rect x="295" y="475" width="10" height="45" fill="#654321" opacity="0.4"/>'; // 脚2
+    }
+    
+    // 家具レベル2: 1LDK
+    if (roomLevel >= 2) {
+      // ソファ
+      svg += '<rect x="400" y="460" width="100" height="50" fill="#4a4a4a" opacity="0.4"/>'; // ソファ
+      svg += '<rect x="400" y="450" width="100" height="20" fill="#6a6a6a" opacity="0.4"/>'; // クッション
+      
+      // 本棚
+      svg += '<rect x="50" y="300" width="80" height="120" fill="#8b4513" opacity="0.3"/>'; // 本棚
+      svg += '<line x1="50" y1="340" x2="130" y2="340" stroke="#654321" stroke-width="1"/>'; // 棚板
+      svg += '<line x1="50" y1="380" x2="130" y2="380" stroke="#654321" stroke-width="1"/>'; // 棚板
+    }
+    
+    // 家具レベル3: マンション
+    if (roomLevel >= 3) {
+      // 大きなTV
+      svg += '<rect x="300" y="350" width="80" height="50" fill="#000000" opacity="0.5"/>'; // TV
+      svg += '<rect x="310" y="400" width="60" height="10" fill="#333333" opacity="0.4"/>'; // TVスタンド
+      
+      // 観葉植物
+      svg += '<circle cx="700" cy="480" r="20" fill="#228b22" opacity="0.4"/>'; // 植物
+      svg += '<rect x="695" y="490" width="10" height="30" fill="#8b4513" opacity="0.4"/>'; // 鉢
+    }
+    
+    // 家具レベル4: 一軒家
+    if (roomLevel >= 4) {
+      // 暖炉
+      svg += '<rect x="150" y="320" width="60" height="80" fill="#8b4513" opacity="0.4"/>'; // 暖炉
+      svg += '<rect x="160" y="330" width="40" height="50" fill="#ff4500" opacity="0.3"/>'; // 火
+      
+      // 絵画
+      svg += '<rect x="250" y="100" width="80" height="60" fill="#daa520" opacity="0.4"/>'; // 額縁
+      svg += '<rect x="260" y="110" width="60" height="40" fill="#87ceeb" opacity="0.3"/>'; // 絵
+      
+      // 大きなソファセット
+      svg += '<rect x="450" y="450" width="140" height="60" fill="#654321" opacity="0.4"/>'; // Lソファ
+      svg += '<rect x="580" y="460" width="60" height="50" fill="#654321" opacity="0.4"/>'; // 追加シート
+    }
+    
+    // 家具レベル5: 豪邸
+    if (roomLevel >= 5) {
+      // ピアノ
+      svg += '<rect x="350" y="420" width="80" height="90" fill="#000000" opacity="0.5"/>'; // ピアノ本体
+      svg += '<rect x="360" y="410" width="60" height="10" fill="#ffffff" opacity="0.4"/>'; // 鍵盤
+      
+      // 大きな絵画
+      svg += '<rect x="400" y="50" width="120" height="90" fill="#daa520" opacity="0.5"/>'; // 大きな額縁
+      svg += '<rect x="410" y="60" width="100" height="70" fill="#9370db" opacity="0.3"/>'; // 高級な絵
+      
+      // 高級カーペット
+      svg += '<ellipse cx="400" cy="500" rx="150" ry="80" fill="#8b0000" opacity="0.3"/>'; // カーペット
+    }
+    
+    // 家具レベル6: 超豪邸
+    if (roomLevel >= 6) {
+      // シャンデリア
+      svg += '<circle cx="400" cy="80" r="30" fill="#ffd700" opacity="0.6"/>'; // シャンデリア
+      svg += '<circle cx="400" cy="80" r="15" fill="#ffff00" opacity="0.4"/>'; // 光
+      svg += '<line x1="400" y1="50" x2="400" y2="110" stroke="#ffd700" stroke-width="2"/>'; // チェーン
+      
+      // 大理石の柱
+      svg += '<rect x="100" y="200" width="20" height="200" fill="#f5f5dc" opacity="0.4"/>'; // 柱1
+      svg += '<rect x="680" y="200" width="20" height="200" fill="#f5f5dc" opacity="0.4"/>'; // 柱2
+      
+      // 高級家具セット
+      svg += '<rect x="500" y="440" width="120" height="70" fill="#8b4513" opacity="0.5"/>'; // 高級テーブル
+      svg += '<circle cx="560" cy="460" r="25" fill="#ffd700" opacity="0.3"/>'; // 装飾
+      
+      // 豪華な植物
+      svg += '<circle cx="150" cy="450" r="30" fill="#228b22" opacity="0.5"/>'; // 大きな植物
+      svg += '<rect x="140" y="470" width="20" height="40" fill="#8b4513" opacity="0.5"/>'; // 大きな鉢
+    }
+    
+    svg += '</svg>';
+    return svg;
+  }
+
+  // 背景更新関数
+  function updateBackground(totalPL, unrealizedPL) {
+    var bgEl = getEl("dynamicBg");
+    var bodyEl = document.body;
+    
+    // 現在の総資産を計算（口座残高 = 利用可能現金 + 評価損益 + 実現損益）
+    var totalBalance = state.cash + unrealizedPL + state.realized;
+    
+    // SVG部屋を生成して背景に設定
+    var roomSVG = generateRoomSVG(totalBalance);
+    var svgDataUrl = 'data:image/svg+xml;base64,' + btoa(roomSVG);
+    
+    bgEl.style.backgroundImage = `url("${svgDataUrl}")`;
+    bgEl.style.backgroundSize = "cover";
+    bgEl.style.backgroundPosition = "center";
+    bgEl.style.backgroundRepeat = "no-repeat";
+    
+    // 損益に応じた追加のグラデーション効果
+    if (totalPL > 50000) {
+      // 大きな利益：金色のオーバーレイ
+      bgEl.style.background = `url("${svgDataUrl}"), radial-gradient(circle at 30% 70%, rgba(255,215,0,0.15) 0%, rgba(34,197,94,0.1) 40%, transparent 70%)`;
+      bodyEl.style.background = "linear-gradient(135deg, #0b0b0f 0%, #1a1f0f 100%)";
+    } else if (totalPL > 20000) {
+      // 中程度の利益：緑のオーバーレイ
+      bgEl.style.background = `url("${svgDataUrl}"), radial-gradient(circle at 40% 60%, rgba(34,197,94,0.1) 0%, transparent 60%)`;
+      bodyEl.style.background = "linear-gradient(135deg, #0b0b0f 0%, #0f1814 100%)";
+    } else if (totalPL < -50000) {
+      // 大きな損失：赤のオーバーレイ
+      bgEl.style.background = `url("${svgDataUrl}"), radial-gradient(circle at 70% 30%, rgba(220,38,38,0.15) 0%, rgba(124,58,237,0.1) 40%, transparent 70%)`;
+      bodyEl.style.background = "linear-gradient(135deg, #0b0b0f 0%, #1a0f0f 100%)";
+    } else if (totalPL < -20000) {
+      // 中程度の損失：薄い赤のオーバーレイ
+      bgEl.style.background = `url("${svgDataUrl}"), radial-gradient(circle at 60% 40%, rgba(220,38,38,0.1) 0%, transparent 60%)`;
+      bodyEl.style.background = "linear-gradient(135deg, #0b0b0f 0%, #180f0f 100%)";
+    } else {
+      // 通常時：部屋のみ
+      bgEl.style.background = `url("${svgDataUrl}")`;
+      bodyEl.style.background = "#0b0b0f";
+    }
+    
+    // 含み損益に応じた追加エフェクト
+    if (Math.abs(unrealizedPL) > 30000) {
+      bgEl.style.opacity = "0.9";
+      // 大きな含み損益時にパルス効果
+      bgEl.style.animation = "pulse 3s ease-in-out infinite";
+    } else {
+      bgEl.style.opacity = "0.8";
+      bgEl.style.animation = "none";
+    }
+  }
+  function updateUI() {
+    setText("spdLabel", state.speedX + "x");
+    setText("lotDisplay", state.lot);
+    
+    setText("economicIndex", state.economicIndex);
+    var ecoEl = getEl("economicIndex");
+    if (ecoEl) {
+      if (state.economicIndex >= 70) ecoEl.style.color = "#34d399";
+      else if (state.economicIndex <= 30) ecoEl.style.color = "#fb7185";
+      else ecoEl.style.color = "#f59e0b";
+    }
+    
+    var total = state.wins + state.losses;
+    var winrate = total > 0 ? Math.round(state.wins / total * 100) : 0;
+    setText("winrateChart", winrate + "%");
+    
+    var p = lastPrice();
+    var unreal = state.qty !== 0 && state.avg ? 
+                (state.qty > 0 ? (p - state.avg) * state.qty : (state.avg - p) * Math.abs(state.qty)) : 0;
+    setText("midUpl", (unreal >= 0 ? "+" : "") + Math.round(unreal).toLocaleString());
+    setText("midRpl", (state.realized >= 0 ? "+" : "") + Math.round(state.realized).toLocaleString());
+    
+    // 口座残高 = 利用可能現金 + 拘束資金 + 評価損益
+    // （state.realizedは累積損益の記録用で、cashに既に反映済みなので含めない）
+    var lockedCash = state.qty !== 0 && state.avg ? Math.abs(state.qty) * state.avg : 0;
+    var totalBalance = state.cash + lockedCash + unreal;
+    setText("midEquity", Math.round(totalBalance).toLocaleString());
+    
+    // キャラクター更新
+    var characterEl = getEl("characterDisplay");
+    if (characterEl) {
+      characterEl.innerHTML = generateCharacter(totalBalance);
+    }
+    
+    // ランク名更新
+    var rankNameEl = getEl("rankName");
+    if (rankNameEl) {
+      var rankName = getRankName(totalBalance);
+      rankNameEl.textContent = rankName;
+      
+      // ランクに応じて色を変更
+      if (totalBalance >= 10000000) rankNameEl.style.color = "#ff69b4"; // ピンク
+      else if (totalBalance >= 5000000) rankNameEl.style.color = "#ffd700"; // 金
+      else if (totalBalance >= 3000000) rankNameEl.style.color = "#00ff00"; // 緑
+      else if (totalBalance >= 1000000) rankNameEl.style.color = "#4169e1"; // 青
+      else if (totalBalance >= 500000) rankNameEl.style.color = "#87ceeb"; // 水色
+      else if (totalBalance >= 250000) rankNameEl.style.color = "#d3d3d3"; // 銀
+      else if (totalBalance >= 100000) rankNameEl.style.color = "#a0a0a0"; // グレー
+      else rankNameEl.style.color = "#696969"; // ダークグレー
+    }
+    
+    if (state.qty === 0) {
+      setText("posType", "なし");
+      setText("posQty", "");
+      setText("posValue", "");
+    } else if (state.qty > 0) {
+      setText("posType", "買い");
+      setText("posQty", state.qty.toLocaleString());
+      var lockedCash = Math.abs(state.qty) * state.avg;
+      setText("posValue", "拘束資金: " + Math.round(lockedCash).toLocaleString() + "円");
+      var posTypeEl = getEl("posType");
+      if (posTypeEl) posTypeEl.className = "green";
+    } else {
+      setText("posType", "売り");
+      setText("posQty", Math.abs(state.qty).toLocaleString());
+      var lockedCash2 = Math.abs(state.qty) * state.avg;
+      setText("posValue", "拘束資金: " + Math.round(lockedCash2).toLocaleString() + "円");
+      var posTypeEl2 = getEl("posType");
+      if (posTypeEl2) posTypeEl2.className = "red";
+    }
+    
+    var uplEl = getEl("midUpl");
+    var rplEl = getEl("midRpl");
+    if (uplEl) uplEl.className = unreal >= 0 ? "green" : "red";
+    if (rplEl) rplEl.className = state.realized >= 0 ? "green" : "red";
+  }
+
+  // Draw chart - 修正版
+  var canvas = getEl("chart"), ctx = canvas.getContext("2d");
+  
+  function draw() {
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    
+    var padL = 64, padR = 64, padT = 40, padB = 46;
+    var chTop = padT + 8, chBottom = h - padB - 8;
+    
+    var gapWidth = 5;
+    var visibleBars = 120;
+    var plotW = w - padL - padR;
+    var cw = plotW / visibleBars;
+    var bodyW = Math.max(2, Math.min(10, cw * 0.7));
+    
+    // すべてのバーを収集
+    var allBars = state.bars.slice();
+    if (state.forming) {
+      allBars.push({
+        o: state.forming.o, h: state.forming.h, l: state.forming.l,
+        c: state.forming.c, v: Math.round(state.forming.vAcc),
+        timeMin: state.forming.timeMin
+      });
+    }
+    
+    if (allBars.length === 0) return;
+    
+    // 9:00の位置を特定（当日の最初のバー）
+    var nineAmIndex = -1;
+    for (var i = 0; i < allBars.length; i++) {
+      if (allBars[i].timeMin === 0) {
+        nineAmIndex = i;
+        break;
+      }
+    }
+    
+    // スクロール位置を計算
+    var centerPos = Math.floor(visibleBars / 2);
+    var scrollThreshold = Math.floor(visibleBars * 3 / 4);
+    
+    // 初期状態または早い時間帯では9:00を中央に（ギャップを考慮）
+    if (nineAmIndex >= 0 && state.curTimeMin <= 20) {
+      state.scrollOffset = Math.max(0, nineAmIndex - centerPos + gapWidth);
+    } else if (allBars.length > 0) {
+      var currentBarCount = allBars.length;
+      var totalWithGaps = currentBarCount;
+      
+      // ギャップ分を追加
+      var hasGapDay = false, hasGapLunch = false;
+      for (var g = 0; g < allBars.length - 1; g++) {
+        if (allBars[g].timeMin < 0 && allBars[g + 1].timeMin >= 0) hasGapDay = true;
+        if (allBars[g].timeMin < 150 && allBars[g + 1].timeMin >= 210) hasGapLunch = true;
+      }
+      if (hasGapDay) totalWithGaps += gapWidth;
+      if (hasGapLunch) totalWithGaps += gapWidth;
+      
+      if (totalWithGaps - state.scrollOffset > scrollThreshold) {
+        state.scrollOffset = totalWithGaps - scrollThreshold;
+      }
+    }
+    
+    // 表示範囲のバーを抽出（ギャップを確実に5本分空ける）
+    var startIdx = Math.floor(state.scrollOffset);
+    var viewBars = [];
+    var displayX = 0;
+    var barIndex = 0;
+    var virtualPos = 0;
+    
+    var totalBars = allBars.length;
+    var lastPrevDayIndex = -1;
+    for (var li = 0; li < allBars.length; li++) {
+      if (allBars[li].timeMin < 0) {
+        lastPrevDayIndex = li;
+      } else {
+        break;
+      }
+    }
+    
+    // バーを順番に処理
+    while (virtualPos < startIdx + visibleBars && barIndex < allBars.length) {
+      // 前日→当日のギャップ処理
+      if (barIndex > 0 && barIndex === lastPrevDayIndex + 1) {
+        if (virtualPos >= startIdx && displayX < visibleBars) {
+          var gapToShow = Math.min(gapWidth, visibleBars - displayX);
+          displayX += gapToShow;
+        }
+        virtualPos += gapWidth;
+      }
+      
+      // 昼休みギャップの処理
+      if (barIndex > 0 && allBars[barIndex-1].timeMin >= 0 && 
+          allBars[barIndex-1].timeMin < 150 && allBars[barIndex].timeMin >= 210) {
+        if (virtualPos >= startIdx && displayX < visibleBars) {
+          var lunchGapToShow = Math.min(gapWidth, visibleBars - displayX);
+          displayX += lunchGapToShow;
+        }
+        virtualPos += gapWidth;
+      }
+      
+      // 表示範囲内のバーを追加
+      if (virtualPos >= startIdx && displayX < visibleBars) {
+        viewBars.push({bar: allBars[barIndex], x: displayX});
+        displayX++;
+      }
+      
+      barIndex++;
+      virtualPos++;
+    }
+    
+    if (viewBars.length === 0) return;
+    
+    // 価格範囲を計算
+    var lo = Infinity, hi = -Infinity;
+    for (var k = 0; k < viewBars.length; k++) {
+      var b = viewBars[k].bar;
+      lo = Math.min(lo, b.l);
+      hi = Math.max(hi, b.h);
+    }
+    var yPad = (hi - lo) * 0.08 || 1;
+    var yMin = lo - yPad, yMax = hi + yPad;
+    
+    function yP(p) { return chBottom - ((p - yMin) / (yMax - yMin || 1)) * (chBottom - chTop); }
+    function xBar(displayPos) { return padL + displayPos * cw + cw * 0.5; }
+    
+    // 価格軸
+    ctx.strokeStyle = "#243049";
+    ctx.beginPath(); ctx.moveTo(padL, chTop); ctx.lineTo(padL, chBottom); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - padR, chTop); ctx.lineTo(w - padR, chBottom); ctx.stroke();
+    
+    ctx.fillStyle = "#cbd5e1"; ctx.font = "11px monospace";
+    for (var t = 0; t <= 6; t++) {
+      var val = yMin + t * (yMax - yMin) / 6, yy = yP(val);
+      ctx.strokeStyle = "#1b2234"; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.textAlign = "left"; ctx.fillText(Math.round(val), 6, yy + 4);
+      ctx.textAlign = "right"; ctx.fillText(Math.round(val), w - 6, yy + 4);
+    }
+    
+    // 時間軸
+    ctx.strokeStyle = "#243049";
+    ctx.beginPath(); ctx.moveTo(padL, chBottom); ctx.lineTo(w - padR, chBottom); ctx.stroke();
+    
+    // 時刻ラベル - 修正版（重複を避ける）
+    ctx.fillStyle = "#9ca3af"; ctx.font = "10px monospace"; ctx.textAlign = "center";
+    
+    // 時刻ラベルのx位置を収集し、重複を避ける
+    var timeLabels = [];
+    var minLabelSpacing = 60; // 最小間隔（ピクセル）
+    
+    for (var vi = 0; vi < viewBars.length; vi++) {
+      var vBar = viewBars[vi];
+      var timeMin = vBar.bar.timeMin;
+      var xPos = xBar(vBar.x);
+      
+      // 1時間刻み（60分）で時刻表示
+      if (timeMin % 60 === 0) {
+        var hour, minute;
+        
+        if (timeMin < 0) {
+          // 前日
+          var totalMin = 390 + timeMin;
+          hour = 9 + Math.floor(totalMin / 60);
+          minute = totalMin % 60;
+        } else {
+          // 当日
+          hour = 9 + Math.floor(timeMin / 60);
+          minute = timeMin % 60;
+        }
+        
+        var timeStr = (hour < 10 ? "0" : "") + hour + ":" + (minute < 10 ? "0" : "") + minute;
+        
+        // 重複チェック
+        var canShow = true;
+        for (var tl = 0; tl < timeLabels.length; tl++) {
+          if (Math.abs(xPos - timeLabels[tl].x) < minLabelSpacing) {
+            canShow = false;
+            break;
+          }
+        }
+        
+        if (canShow) {
+          timeLabels.push({x: xPos, text: timeStr, timeMin: timeMin});
+        }
+      }
+    }
+    
+    // 時刻ラベルとグリッド線を描画
+    for (var tli = 0; tli < timeLabels.length; tli++) {
+      var label = timeLabels[tli];
+      
+      // グリッド線
+      ctx.strokeStyle = "#1b2234"; 
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); 
+      ctx.moveTo(label.x, chTop); 
+      ctx.lineTo(label.x, chBottom); 
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // 時刻ラベル
+      ctx.fillStyle = "#9ca3af";
+      ctx.fillText(label.text, label.x, chBottom + 14);
+    }
+    
+    // ギャップの位置に境界線を描画
+    var dayBoundaryDrawn = false;
+    var lunchBoundaryDrawn = false;
+    
+    for (var gi = 0; gi < viewBars.length - 1; gi++) {
+      var currentBar = viewBars[gi].bar;
+      var nextBar = viewBars[gi + 1].bar;
+      
+      // 前日(-1)から当日(0)への境界
+      if (currentBar.timeMin < 0 && nextBar.timeMin >= 0 && !dayBoundaryDrawn) {
+        var gapStartX = xBar(viewBars[gi].x);
+        var gapEndX = xBar(viewBars[gi + 1].x);
+        var gapCenterX = (gapStartX + gapEndX) / 2;
+        
+        ctx.strokeStyle = "#f59e0b"; 
+        ctx.lineWidth = 2; 
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath(); 
+        ctx.moveTo(gapCenterX, chTop); 
+        ctx.lineTo(gapCenterX, chBottom); 
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#f59e0b"; 
+        ctx.font = "11px sans-serif";
+        ctx.fillText("当日開始", gapCenterX, chTop - 5);
+        ctx.lineWidth = 1;
+        dayBoundaryDrawn = true;
+      }
+      
+      // 前場(149以下)から後場(210以上)への境界
+      if (currentBar.timeMin >= 0 && currentBar.timeMin < 150 && 
+          nextBar.timeMin >= 210 && !lunchBoundaryDrawn) {
+        var lunchStartX = xBar(viewBars[gi].x);
+        var lunchEndX = xBar(viewBars[gi + 1].x);
+        var lunchCenterX = (lunchStartX + lunchEndX) / 2;
+        
+        ctx.strokeStyle = "#9ca3af"; 
+        ctx.lineWidth = 1; 
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); 
+        ctx.moveTo(lunchCenterX, chTop); 
+        ctx.lineTo(lunchCenterX, chBottom); 
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#9ca3af";
+        ctx.fillText("昼休み", lunchCenterX, chTop - 5);
+        lunchBoundaryDrawn = true;
+      }
+    }
+    
+    // ローソク足を描画
+    for (var a = 0; a < viewBars.length; a++) {
+      var vb = viewBars[a];
+      var b = vb.bar, cx = xBar(vb.x);
+      var o = yP(b.o), c = yP(b.c), h = yP(b.h), l = yP(b.l);
+      var up = b.c >= b.o;
+      
+      ctx.globalAlpha = b.timeMin < 0 ? 0.5 : 1.0;
+      ctx.strokeStyle = up ? "#34d399" : "#fb7185";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx, h); ctx.lineTo(cx, l); ctx.stroke();
+      var top = Math.min(o, c), hei = Math.max(1, Math.abs(c - o));
+      ctx.fillStyle = up ? "#34d399" : "#fb7185";
+      ctx.fillRect(cx - bodyW / 2, top, bodyW, hei);
+      ctx.globalAlpha = 1.0;
+    }
+    
+    // 売買マーク - ローソク足実体の左端に正確に配置
+    for (var s = 0; s < state.stamps.length; s++) {
+      var st = state.stamps[s];
+      for (var si = 0; si < viewBars.length; si++) {
+        var vbs = viewBars[si];
+        if (vbs.bar.timeMin <= st.t && vbs.bar.timeMin + state.tfMin > st.t) {
+          var cxS = xBar(vbs.x);
+          var markerY = yP(st.price); // 正確な価格位置
+          var triangleSize = 5; // サイズを小さく
+          
+          // ローソク足実体の幅を再計算（bodyWと同じ計算）
+          var currentBodyW = Math.max(2, Math.min(10, cw * 0.7));
+          
+          // ローソク足実体の左端を計算
+          var bodyLeftEdge = cxS - currentBodyW / 2;
+          
+          // 横向き三角形（右向き、先端がローソク足実体の左端にピッタリ重なる）
+          ctx.fillStyle = st.kind === 'IN' ? "#0066ff" : "#ff0000"; // 買い=青、売り=赤
+          ctx.beginPath();
+          ctx.moveTo(bodyLeftEdge, markerY); // 先端（ローソク足実体の左端）
+          ctx.lineTo(bodyLeftEdge - triangleSize, markerY - triangleSize); // 左上
+          ctx.lineTo(bodyLeftEdge - triangleSize, markerY + triangleSize); // 左下
+          ctx.closePath();
+          ctx.fill();
+          
+          break;
+        }
+      }
+    }
+    
+    // 移動平均線（前日から連続して描画）
+    function sma(arr, len) {
+      var out = new Array(arr.length);
+      for (var i = 0; i < arr.length; i++) out[i] = null;
+      var sum = 0;
+      for (var j = 0; j < arr.length; j++) {
+        sum += arr[j].c;
+        if (j >= len) sum -= arr[j - len].c;
+        if (j >= len - 1) out[j] = Math.round(sum / len);
+      }
+      return out;
+    }
+    
+    var ma5 = sma(allBars, 5), ma12 = sma(allBars, 12), ma25 = sma(allBars, 25);
+    
+    function drawMA(ma, color) {
+      ctx.strokeStyle = color; 
+      ctx.lineWidth = 1.6;
+      var segments = [];
+      var currentSegment = [];
+      
+      var barIndexMap = [];
+      for (var vm = 0; vm < viewBars.length; vm++) {
+        var vbar = viewBars[vm].bar;
+        for (var am = 0; am < allBars.length; am++) {
+          if (allBars[am].timeMin === vbar.timeMin &&
+              Math.abs(allBars[am].c - vbar.c) < 0.01) {
+            barIndexMap.push(am);
+            break;
+          }
+        }
+      }
+      
+      for (var mi = 0; mi < viewBars.length && mi < barIndexMap.length; mi++) {
+        var originalIdx = barIndexMap[mi];
+        
+        if (originalIdx < ma.length && ma[originalIdx] != null) {
+          var cx = xBar(viewBars[mi].x);
+          var cy = yP(ma[originalIdx]);
+          
+          if (mi > 0 && viewBars[mi].x - viewBars[mi - 1].x > 2) {
+            if (currentSegment.length > 0) {
+              segments.push(currentSegment);
+              currentSegment = [];
+            }
+          }
+          
+          currentSegment.push({x: cx, y: cy});
+        }
+      }
+      
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
+      
+      for (var seg = 0; seg < segments.length; seg++) {
+        if (segments[seg].length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(segments[seg][0].x, segments[seg][0].y);
+          for (var sp = 1; sp < segments[seg].length; sp++) {
+            ctx.lineTo(segments[seg][sp].x, segments[seg][sp].y);
+          }
+          ctx.stroke();
+        }
+      }
+    }
+    
+    drawMA(ma5, "#38bdf8");
+    drawMA(ma12, "#a78bfa");
+    drawMA(ma25, "#f59e0b");
+  }
+
+  // イベントリスナー
+  getEl("btnStart").addEventListener("click", function() { state.running ? pause() : start(); });
+  getEl("btnReset").addEventListener("click", reset);
+  getEl("btnBuy").addEventListener("click", function() { tradeLots(1); });
+  getEl("btnSell").addEventListener("click", function() { tradeLots(-1); });
+  getEl("btnClose").addEventListener("click", closeAll);
+  
+  // ロット調整（タップ式）
+  getEl("lotMinus").addEventListener("click", function() { 
+    state.lot = Math.max(0, state.lot - 100); 
+    updateUI(); 
+  });
+  getEl("lotPlus").addEventListener("click", function() { 
+    state.lot = Math.min(20000, state.lot + 100); 
+    updateUI(); 
+  });
+  
+  // ホバー効果（PC用）
+  getEl("lotMinus").addEventListener("mouseenter", function() {
+    this.style.background = "#4b5563";
+  });
+  getEl("lotMinus").addEventListener("mouseleave", function() {
+    this.style.background = "#374151";
+  });
+  getEl("lotPlus").addEventListener("mouseenter", function() {
+    this.style.background = "#4b5563";
+  });
+  getEl("lotPlus").addEventListener("mouseleave", function() {
+    this.style.background = "#374151";
+  });
+  
+  // タッチ効果（スマホ用）
+  getEl("lotMinus").addEventListener("touchstart", function() {
+    this.style.background = "#4b5563";
+  });
+  getEl("lotMinus").addEventListener("touchend", function() {
+    this.style.background = "#374151";
+  });
+  getEl("lotPlus").addEventListener("touchstart", function() {
+    this.style.background = "#4b5563";
+  });
+  getEl("lotPlus").addEventListener("touchend", function() {
+    this.style.background = "#374151";
+  });
+  
+  getEl("speed").addEventListener("input", function(e) { 
+    state.speedX = parseInt(e.target.value, 10); 
+    updateUI(); 
+  });
+
+  // 初期化
+  init();
+});
+</script>
+</body>
+</html>
