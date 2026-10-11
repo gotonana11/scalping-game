@@ -20,7 +20,12 @@
   .label { font-size:12px; color:#9ca3af; margin-top:2px; }
   input[type=range] { width:100%; }
   .chip { background:#0f172a; border:1px solid #243049; padding:4px 8px; border-radius:999px; font-size:12px; }
-  canvas { width:100%; height:500px; background:#0a0d14; border-radius:14px; border:1px solid #1f2430; display:block; }
+  canvas { width:100%; height:500px; background:#131722; border-radius:0; display:block; touch-action:pan-y; }
+  .chart-card { padding:0; overflow:hidden; border-radius:8px; }
+  .chart-toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid #2a2e39; font-size:12px; color:#9598a1; }
+  .chart-toolbar strong { color:#d1d4dc; font-size:14px; }
+  .chart-orders { display:flex; gap:8px; padding:8px 16px; background:#131722; }
+  .chart-footer { padding:8px 16px; border-top:1px solid #2a2e39; font-size:11px; color:#9598a1; }
   .middle3 { display:grid; grid-template-columns: 1fr 180px 1.2fr; gap:12px; margin:12px 0; }
   .box { background:#0e1320; border:1px solid #1f2430; border-radius:12px; padding:12px; }
   .lotBig { font-size:18px; font-weight:800; text-align:center; }
@@ -104,17 +109,19 @@
   </div>
 
   <!-- Chart -->
-  <div class="card" style="position:relative;">
-    <div style="margin-bottom: 8px; font-size: 12px; color: #9ca3af;">
+  <div class="card chart-card" style="position:relative;">
+    <div class="chart-toolbar"><strong>シミュレーション銘柄</strong><span>1分足</span><span>JPY</span><span>練習用データ</span></div>
+    <div class="chart-toolbar">
       移動平均線: <span style="color: #38bdf8;">■ 5MA</span> | <span style="color: #a78bfa;">■ 12MA</span> | <span style="color: #f59e0b;">■ 25MA</span>
     </div>
     <!-- Trading Buttons Overlay -->
-    <div style="position: absolute; top: 50px; left: 80px; z-index: 10; display: flex; gap: 8px;">
+    <div class="chart-orders">
       <button id="btnBuy" class="btn-green" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">買い</button>
       <button id="btnSell" class="btn-pink" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">売り</button>
       <button id="btnClose" class="btn-amber" style="padding: 8px 12px; font-size: 12px; font-weight: bold;">全決済</button>
     </div>
-    <canvas id="chart" width="1320" height="500"></canvas>
+    <canvas id="chart" width="1320" height="500" aria-label="1分足ローソク足、移動平均線、出来高チャート。ポインターで時刻と価格を確認できます。"></canvas>
+    <div class="chart-footer">十字カーソルで四本値・出来高を確認 · 下段：出来高 · 右軸：価格（円）</div>
     <div id="hint" style="display:flex; position:absolute; inset:0; align-items:center; justify-content:center; pointer-events:none;">
       <div style="background:rgba(15,23,42,.85); border:1px solid #243049; padding:10px 14px; border-radius:10px; font-weight:700;">Startを押すと動きます</div>
     </div>
@@ -1051,16 +1058,35 @@ window.addEventListener('DOMContentLoaded', function() {
 
   // Draw chart - 修正版
   var canvas = getEl("chart"), ctx = canvas.getContext("2d");
+  var chartPointer = null;
+  function chartTime(timeMin) {
+    var minutes = 540 + (timeMin < 0 ? 390 + timeMin : timeMin);
+    return (timeMin < 0 ? "前日 " : "") + String(Math.floor(minutes / 60)).padStart(2, "0") + ":" + String(minutes % 60).padStart(2, "0");
+  }
+  canvas.addEventListener("pointermove", function(event) {
+    var rect = canvas.getBoundingClientRect();
+    chartPointer = {x: event.clientX - rect.left, y: event.clientY - rect.top};
+    draw();
+  });
+  canvas.addEventListener("pointerleave", function() { chartPointer = null; draw(); });
+  canvas.addEventListener("pointerup", function(event) { if (event.pointerType !== "mouse") { chartPointer = null; draw(); } });
+  new ResizeObserver(function() { draw(); }).observe(canvas);
   
   function draw() {
-    var w = canvas.width, h = canvas.height;
+    var w = canvas.clientWidth, h = canvas.clientHeight;
+    var dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     
-    var padL = 64, padR = 64, padT = 40, padB = 46;
-    var chTop = padT + 8, chBottom = h - padB - 8;
+    var padL = 12, padR = 76, padT = 48, padB = 28;
+    var volumeTop = h - 124, volumeBottom = h - padB;
+    var chTop = padT, chBottom = volumeTop - 18;
     
     var gapWidth = 5;
-    var visibleBars = 120;
+    var visibleBars = Math.max(35, Math.min(120, Math.floor((w - padL - padR) / 8)));
     var plotW = w - padL - padR;
     var cw = plotW / visibleBars;
     var bodyW = Math.max(2, Math.min(10, cw * 0.7));
@@ -1185,7 +1211,7 @@ window.addEventListener('DOMContentLoaded', function() {
       ctx.strokeStyle = "#1b2234"; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(w - padR, yy); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.textAlign = "left"; ctx.fillText(Math.round(val), 6, yy + 4);
+      
       ctx.textAlign = "right"; ctx.fillText(Math.round(val), w - 6, yy + 4);
     }
     
@@ -1246,13 +1272,13 @@ window.addEventListener('DOMContentLoaded', function() {
       ctx.setLineDash([4, 4]);
       ctx.beginPath(); 
       ctx.moveTo(label.x, chTop); 
-      ctx.lineTo(label.x, chBottom); 
+      ctx.lineTo(label.x, volumeBottom);
       ctx.stroke();
       ctx.setLineDash([]);
       
       // 時刻ラベル
       ctx.fillStyle = "#9ca3af";
-      ctx.fillText(label.text, label.x, chBottom + 14);
+      ctx.fillText(label.text, label.x, h - 9);
     }
     
     // ギャップの位置に境界線を描画
@@ -1309,15 +1335,15 @@ window.addEventListener('DOMContentLoaded', function() {
     for (var a = 0; a < viewBars.length; a++) {
       var vb = viewBars[a];
       var b = vb.bar, cx = xBar(vb.x);
-      var o = yP(b.o), c = yP(b.c), h = yP(b.h), l = yP(b.l);
+      var o = yP(b.o), c = yP(b.c), wickHigh = yP(b.h), wickLow = yP(b.l);
       var up = b.c >= b.o;
       
       ctx.globalAlpha = b.timeMin < 0 ? 0.5 : 1.0;
-      ctx.strokeStyle = up ? "#34d399" : "#fb7185";
+      ctx.strokeStyle = up ? "#26a69a" : "#ef5350";
       ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(cx, h); ctx.lineTo(cx, l); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, wickHigh); ctx.lineTo(cx, wickLow); ctx.stroke();
       var top = Math.min(o, c), hei = Math.max(1, Math.abs(c - o));
-      ctx.fillStyle = up ? "#34d399" : "#fb7185";
+      ctx.fillStyle = up ? "#26a69a" : "#ef5350";
       ctx.fillRect(cx - bodyW / 2, top, bodyW, hei);
       ctx.globalAlpha = 1.0;
     }
@@ -1422,6 +1448,64 @@ window.addEventListener('DOMContentLoaded', function() {
     drawMA(ma5, "#38bdf8");
     drawMA(ma12, "#a78bfa");
     drawMA(ma25, "#f59e0b");
+
+    // Separate volume pane, sharing candle positions and session gaps.
+    ctx.strokeStyle = "#2a2e39"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, volumeTop); ctx.lineTo(w - padR, volumeTop); ctx.stroke();
+    var maxVolume = Math.max(1, ...viewBars.map(function(item) { return item.bar.v || 0; }));
+    viewBars.forEach(function(item) {
+      var bar = item.bar;
+      var height = (bar.v || 0) / maxVolume * (volumeBottom - volumeTop - 20);
+      ctx.fillStyle = bar.c >= bar.o ? "rgba(38,166,154,.55)" : "rgba(239,83,80,.55)";
+      ctx.fillRect(xBar(item.x) - bodyW / 2, volumeBottom - height, bodyW, height);
+    });
+    ctx.font = "11px monospace"; ctx.textAlign = "right"; ctx.fillStyle = "#9598a1";
+    ctx.fillText(Math.round(maxVolume).toLocaleString(), w - 8, volumeTop + 25);
+
+    function axisLabel(text, y, color) {
+      y = Math.max(chTop + 10, Math.min(chBottom - 10, y));
+      ctx.fillStyle = color; ctx.fillRect(w - padR + 1, y - 10, padR - 1, 20);
+      ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.font = "11px monospace";
+      ctx.fillText(text, w - padR / 2, y + 4);
+    }
+    var latest = allBars[allBars.length - 1];
+    var latestY = yP(latest.c);
+    var priceColor = latest.c >= latest.o ? "#26a69a" : "#ef5350";
+    if (latestY >= chTop && latestY <= chBottom) {
+      ctx.strokeStyle = priceColor; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(padL, latestY); ctx.lineTo(w - padR, latestY); ctx.stroke(); ctx.setLineDash([]);
+      axisLabel(latest.c.toLocaleString(), latestY, priceColor);
+    }
+    var selected = latest;
+    if (chartPointer && chartPointer.x >= padL && chartPointer.x < w - padR && chartPointer.y >= chTop && chartPointer.y <= volumeBottom) {
+      var nearest = viewBars.reduce(function(best, item) {
+        return Math.abs(xBar(item.x) - chartPointer.x) < Math.abs(xBar(best.x) - chartPointer.x) ? item : best;
+      }, viewBars[0]);
+      // Leave session gaps and empty future space without a candle selection.
+      if (Math.abs(xBar(nearest.x) - chartPointer.x) <= cw / 2) {
+        selected = nearest.bar;
+        var crossX = xBar(nearest.x), crossY = chartPointer.y;
+        ctx.strokeStyle = "#9598a1"; ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(crossX, chTop); ctx.lineTo(crossX, volumeBottom);
+        ctx.moveTo(padL, crossY); ctx.lineTo(w - padR, crossY); ctx.stroke(); ctx.setLineDash([]);
+        if (crossY <= chBottom) {
+          var crossPrice = yMin + (chBottom - crossY) / (chBottom - chTop) * (yMax - yMin);
+          axisLabel(crossPrice.toLocaleString("ja-JP", {maximumFractionDigits: 1}), crossY, "#434651");
+        }
+        var timeText = chartTime(selected.timeMin);
+        var labelWidth = ctx.measureText(timeText).width + 16;
+        var labelX = Math.max(padL, Math.min(w - padR - labelWidth, crossX - labelWidth / 2));
+        ctx.fillStyle = "#434651"; ctx.fillRect(labelX, volumeBottom, labelWidth, padB);
+        ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText(timeText, labelX + labelWidth / 2, h - 9);
+      }
+    }
+    ctx.textAlign = "left"; ctx.font = "11px monospace"; ctx.fillStyle = selected.c >= selected.o ? "#26a69a" : "#ef5350";
+    var quote = "始 " + selected.o + "  高 " + selected.h + "  安 " + selected.l + "  終 " + selected.c;
+    ctx.fillText(quote, padL + 4, 20, plotW - 8);
+    ctx.fillStyle = "#9598a1";
+    ctx.fillText(chartTime(selected.timeMin), padL + 4, 38);
+    ctx.fillText("出来高 " + (selected.v || 0).toLocaleString(), padL + 4, volumeTop + 15);
+
   }
 
   // イベントリスナー
