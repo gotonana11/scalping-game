@@ -42,6 +42,19 @@
   .stats-panel { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; text-align:center; }
   .stat-item { padding:6px; }
   .stat-value { font-size:18px; font-weight:bold; margin-top:2px; }
+  .depth-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+  .depth-table { width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums; }
+  .depth-table th,.depth-table td { padding:5px 8px; border-bottom:1px solid #252a36; text-align:right; }
+  .depth-table th { color:#9598a1; font-weight:500; }
+  .depth-table .ask { color:#ef5350; } .depth-table .bid { color:#26a69a; }
+  .depth-price { background:transparent; color:#d1d4dc; width:100%; padding:4px; border-radius:3px; font-size:12px; }
+  .depth-current { background:#283345; }
+  .depth-own { color:#fbbf24; font-size:11px; }
+  .order-list { display:grid; gap:8px; margin-top:12px; max-height:480px; overflow:auto; }
+  .order-item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px; background:#171c28; border-radius:6px; font-size:12px; }
+  .order-item button { padding:5px 8px; font-size:11px; background:#374151; }
+  .depth-note { color:#9598a1; font-size:12px; line-height:1.7; }
+  @media(max-width:650px) { .depth-layout { grid-template-columns:1fr; } .depth-table th,.depth-table td { padding:5px 3px; } }
 </style>
 </head>
 <body>
@@ -126,6 +139,21 @@
       <div style="background:rgba(15,23,42,.85); border:1px solid #243049; padding:10px 14px; border-radius:10px; font-weight:700;">Startを押すと動きます</div>
     </div>
   </div>
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><strong>全板風 · 指値注文</strong><span class="chip">シミュレーション板</span></div>
+    <div class="depth-layout">
+      <div>
+        <table class="depth-table" aria-label="現在値上下の売買板"><thead><tr><th>売数量</th><th>価格（円）</th><th>買数量</th><th>自分の注文</th></tr></thead><tbody id="depthRows"></tbody></table>
+        <p class="depth-note">板数量は練習用の推定値です。価格をクリックすると選択した売買方向・現在のロットで発注します。同じ方向・価格の注文がある場合はクリックで取消。</p>
+      </div>
+      <div>
+        <div class="row"><button id="limitBuy" aria-pressed="true" class="btn-green">買い指値</button><button id="limitSell" aria-pressed="false" class="btn-ghost">売り指値</button><button id="cancelLimits" class="btn-ghost">待機注文を全取消</button></div>
+        <p class="depth-note">注文数量：<span id="limitLot">100</span>株 · <span id="limitSideLabel">買い</span><br>買いは現在値が指値以下、売りは指値以上で約定します。条件成立時の現在値で全数量を約定。資金は約定時に確認し、不足する注文は失効します。全決済は保有ポジションのみ、Resetは待機注文も取り消します。</p>
+        <div id="orderMessage" class="depth-note" role="status" aria-live="polite"></div>
+        <div id="limitOrders" class="order-list" aria-label="指値注文と約定履歴"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -141,7 +169,7 @@ window.addEventListener('DOMContentLoaded', function() {
     prevSessionHigh: null, prevSessionLow: null, seed: Math.random() * 1e9,
     stamps: [], wins: 0, losses: 0, totalHoldMin: 0, trades: 0, entryTimeMin: null,
     rsi: 50, economicIndex: Math.floor(Math.random() * 101),
-    scrollOffset: 0
+    scrollOffset: 0, limitSide: 1, limitOrders: [], nextOrderId: 1
   };
 
   // 効果音再生関数
@@ -552,7 +580,9 @@ window.addEventListener('DOMContentLoaded', function() {
     state.qty = 0; 
     state.avg = null; 
     state.realized = 0;
-    state.stamps = []; 
+    state.stamps = [];
+    state.limitOrders = []; state.nextOrderId = 1;
+    setText("orderMessage", "");
     state.wins = 0; 
     state.losses = 0;
     state.totalHoldMin = 0; 
@@ -606,6 +636,7 @@ window.addEventListener('DOMContentLoaded', function() {
     state.sessionHighPrice = Math.max(state.sessionHighPrice || 0, state.forming.h);
     state.sessionLowPrice = Math.min(state.sessionLowPrice || Infinity, state.forming.l);
     
+    matchLimitOrders();
     state.microIndex++;
     
     if (state.microIndex >= steps) {
@@ -646,10 +677,19 @@ window.addEventListener('DOMContentLoaded', function() {
     }, 2000);
   }
   
-  function tradeLots(delta) {
-    var shares = delta * state.lot;
-    if (shares === 0) return;
-    var p = lastPrice();
+  function tradeLots(delta) { executeTrade(delta * state.lot, lastPrice()); }
+
+  // Market buttons and limit fills share one atomic position/cash calculation.
+  function executeTrade(shares, p) {
+    if (!shares || !Number.isFinite(p) || p <= 0) return false;
+    var sameSide = state.qty === 0 || Math.sign(state.qty) === Math.sign(shares);
+    var closing = sameSide ? 0 : Math.min(Math.abs(shares), Math.abs(state.qty));
+    var closingProfit = closing ? (state.qty > 0 ? p - state.avg : state.avg - p) * closing : 0;
+    var opening = Math.abs(shares) - closing;
+    if (opening * p > state.cash + closing * (state.avg || 0) + closingProfit) {
+      showAlert("口座残高が不足です");
+      return false;
+    }
     
     var requiredCash = Math.abs(shares) * p; // 買いでも売りでも同額の資金が必要
     
@@ -672,7 +712,7 @@ window.addEventListener('DOMContentLoaded', function() {
       }
       state.cash -= requiredCash; // 追加資金を拘束
       var newQty = state.qty + shares;
-      state.avg = Math.round((state.avg * Math.abs(state.qty) + p * Math.abs(shares)) / Math.abs(newQty));
+      state.avg = (state.avg * Math.abs(state.qty) + p * Math.abs(shares)) / Math.abs(newQty);
       state.qty = newQty;
     } else {
       // 反対売買（決済または反転）
@@ -721,33 +761,79 @@ window.addEventListener('DOMContentLoaded', function() {
       }
     }
     updateUI();
+    draw();
+    return true;
   }
   
   function closeAll() {
-    if (state.qty === 0) return;
+    if (state.qty !== 0) executeTrade(-state.qty, lastPrice());
+  }
+
+  function matchLimitOrders() {
     var p = lastPrice();
-    var profit = state.qty > 0 ? (p - state.avg) * state.qty : (state.avg - p) * Math.abs(state.qty);
-    
-    // 効果音再生
-    playSE(profit >= 0);
-    
-    state.realized += profit;
-    
-    // 全ポジション決済：拘束資金を解放（元の拘束額 + 損益）
-    var releasedCash = Math.abs(state.qty) * state.avg + profit;
-    state.cash += releasedCash;
-    
-    if (profit >= 0) state.wins++; else state.losses++;
-    if (state.entryTimeMin != null) {
-      state.totalHoldMin += (state.forming ? state.forming.timeMin : state.curTimeMin) - state.entryTimeMin;
-      state.trades++;
-    }
-    
-    state.stamps.push({t: state.forming ? state.forming.timeMin : state.curTimeMin, price: p, kind: 'OUT'});
-    state.qty = 0; 
-    state.avg = null; 
-    state.entryTimeMin = null;
+    state.limitOrders.forEach(function(order) {
+      if (order.status !== "待機中") return;
+      if (order.side > 0 ? p <= order.price : p >= order.price) {
+        // Mark first to avoid recursive UI rendering treating the order as pending.
+        order.status = "約定処理中";
+        if (executeTrade(order.side * order.qty, p)) {
+          order.status = "約定"; order.fillPrice = p;
+          setText("orderMessage", "#" + order.id + " " + (order.side > 0 ? "買い" : "売り") + " " + order.qty + "株が " + p.toLocaleString() + "円で約定");
+        } else {
+          order.status = "資金不足で失効";
+          setText("orderMessage", "#" + order.id + " は資金不足で失効しました");
+        }
+      }
+    });
+  }
+
+  function placeLimit(price) {
+    var existing = state.limitOrders.find(function(order) { return order.status === "待機中" && order.side === state.limitSide && order.price === price; });
+    if (existing) { cancelLimit(existing.id); return; }
+    if (state.lot <= 0) { showAlert("ロットを100株以上に設定してください"); return; }
+    if (state.limitOrders.filter(function(order) { return order.status === "待機中"; }).length >= 30) { showAlert("待機注文は30件までです"); return; }
+    state.limitOrders = state.limitOrders.filter(function(order) { return order.status === "待機中"; }).concat(state.limitOrders.filter(function(order) { return order.status !== "待機中"; }).slice(-49));
+    var order = {id: state.nextOrderId++, side: state.limitSide, price: price, qty: state.lot, status: "待機中"};
+    state.limitOrders.push(order);
+    setText("orderMessage", "#" + order.id + " 指値注文を受け付けました");
+    matchLimitOrders(); updateUI();
+  }
+
+  function cancelLimit(id) {
+    var order = state.limitOrders.find(function(item) { return item.id === id; });
+    if (!order || order.status !== "待機中") return;
+    order.status = "取消";
+    setText("orderMessage", "#" + id + " を取り消しました");
     updateUI();
+  }
+
+  var depthSignature = "";
+  function updateDepth() {
+    setText("limitLot", state.lot.toLocaleString());
+    setText("limitSideLabel", state.limitSide > 0 ? "買い" : "売り");
+    getEl("limitBuy").setAttribute("aria-pressed", String(state.limitSide > 0));
+    getEl("limitSell").setAttribute("aria-pressed", String(state.limitSide < 0));
+    getEl("limitBuy").className = state.limitSide > 0 ? "btn-green" : "btn-ghost";
+    getEl("limitSell").className = state.limitSide < 0 ? "btn-pink" : "btn-ghost";
+    var p = lastPrice();
+    var signature = JSON.stringify([p, state.limitSide, state.limitOrders]);
+    if (signature === depthSignature) return;
+    depthSignature = signature;
+    var rows = "";
+    for (var offset = 10; offset >= -10; offset--) {
+      var price = p;
+      for (var step = 0; step < Math.abs(offset); step++) {
+        price += offset > 0 ? (price >= 3000 ? 5 : 1) : -(price > 3000 ? 5 : 1);
+      }
+      if (price <= 0) continue;
+      var quantity = (1 + Math.floor(Math.abs(Math.sin(price * 12.9898)) * 39)) * 100;
+      var own = state.limitOrders.filter(function(order) { return order.price === price && order.status === "待機中"; }).map(function(order) { return (order.side > 0 ? "買" : "売") + order.qty; }).join(" / ");
+      rows += '<tr class="' + (offset === 0 ? 'depth-current' : '') + '"><td class="ask">' + (offset > 0 ? quantity.toLocaleString() : '') + '</td><td><button class="depth-price" data-price="' + price + '" aria-label="' + price + '円で' + (state.limitSide > 0 ? '買い' : '売り') + '指値注文、同価格の待機注文は取消">' + price.toLocaleString() + (offset === 0 ? ' ◀' : '') + '</button></td><td class="bid">' + (offset < 0 ? quantity.toLocaleString() : '') + '</td><td class="depth-own">' + own + '</td></tr>';
+    }
+    getEl("depthRows").innerHTML = rows;
+    getEl("limitOrders").innerHTML = state.limitOrders.slice().reverse().map(function(order) {
+      return '<div class="order-item"><span>#' + order.id + ' <span class="' + (order.side > 0 ? 'green' : 'red') + '">' + (order.side > 0 ? '買い' : '売り') + '</span> ' + order.qty.toLocaleString() + '株 · 指値 ' + order.price.toLocaleString() + '円<br>' + order.status + (order.fillPrice != null ? ' · 約定 ' + order.fillPrice.toLocaleString() + '円' : '') + '</span>' + (order.status === '待機中' ? '<button data-cancel="' + order.id + '">取消</button>' : '') + '</div>';
+    }).join("") || '<div class="depth-note">注文はありません</div>';
   }
 
   // Animation loop
@@ -980,6 +1066,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   }
   function updateUI() {
+    updateDepth();
     setText("spdLabel", state.speedX + "x");
     setText("lotDisplay", state.lot);
     
@@ -1558,6 +1645,20 @@ window.addEventListener('DOMContentLoaded', function() {
     updateUI(); 
   });
 
+  getEl("limitBuy").addEventListener("click", function() { state.limitSide = 1; updateDepth(); });
+  getEl("limitSell").addEventListener("click", function() { state.limitSide = -1; updateDepth(); });
+  getEl("depthRows").addEventListener("click", function(event) {
+    var button = event.target.closest("[data-price]");
+    if (button) placeLimit(Number(button.dataset.price));
+  });
+  getEl("limitOrders").addEventListener("click", function(event) {
+    var button = event.target.closest("[data-cancel]");
+    if (button) cancelLimit(Number(button.dataset.cancel));
+  });
+  getEl("cancelLimits").addEventListener("click", function() {
+    state.limitOrders.forEach(function(order) { if (order.status === "待機中") order.status = "取消"; });
+    setText("orderMessage", "待機注文をすべて取り消しました"); updateUI();
+  });
   // 初期化
   init();
 });
